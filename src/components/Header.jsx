@@ -1,5 +1,6 @@
 import React from "react"
 import { Button, Status } from '../components'
+import { NavLink } from "react-router-dom"
 
 export default function Header() {
     return (
@@ -7,11 +8,15 @@ export default function Header() {
             <header className='flex justify-between items-center h-12 bg-[#1a1c20] w-full px-4'>
                 <div className='flex items-center'>
                     <div className='flex items-center gap-2'>
-                        <div className='w-[18px] h-[18px] bg-[#2b303b] border '></div>
+                        <img src="/logo-black.svg" alt="Logo" className="p-2"/>
                         <span className='text-[13px] font-medium text-white'>Synapse</span>
                     </div>
                 </div>
-
+                <nav className='flex items-center gap-4 text-[13px] text-gray-400'>
+                    <NavLink to="/home" className='hover:text-white'>Home</NavLink>
+                    <NavLink to="/canvas" className='hover:text-white'>Canvas</NavLink>
+                    <NavLink to="/login" className='hover:text-white'>Login</NavLink>
+                </nav>
                 <span className='text-[13px] text-gray-400 ml-6'>Test name</span>
 
                 <div className='flex gap-2 ml-6'>
