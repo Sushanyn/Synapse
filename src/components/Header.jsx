@@ -16,7 +16,7 @@ export default function Header() {
                     <NavLink to='/canvas' className='hover:text-white'>Canvas</NavLink>
                     <NavLink to='/login' className='hover:text-white'>Login</NavLink>
                 </nav>
-                <span className='text-[13px] text-gray-400 ml-6'>Test name</span>
+                <span className='text-[13px] text-gray-400 ml-6'></span>
 
                 <div className='flex gap-2 ml-6'>
                     <Button></Button>
