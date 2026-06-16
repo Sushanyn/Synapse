@@ -7,7 +7,7 @@ export default function App() {
       <Routes>
         <Route element={<AppLayout></AppLayout>}>
           <Route path='/canvas' element={<Canvas></Canvas>}></Route>
-          <Route path='/login' element={<Auth></Auth>}></Route>
+          <Route path='/auth' element={<Auth></Auth>}></Route>
           <Route path='*' element={<ErrorPage></ErrorPage>}></Route>
         </Route>
       </Routes>
