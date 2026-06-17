@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { IoIosClose } from "react-icons/io";
 import { MdOpenInFull } from "react-icons/md";
 import { FaEllipsisV } from "react-icons/fa";
+import { supabase } from '../lib/supabase';
 
 const initialProjects = [
     {
@@ -105,6 +106,56 @@ export default function Canvas() {
         }
         setDragState({ type: null, id: null })
     }
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return; 
+
+            const { data, error } = await supabase
+                .from('projects')
+                .select('*')
+                .eq('user_id', session.user.id);
+
+            if (error) {
+                console.error("Ошибка загрузки:", error);
+                return;
+            }
+
+            if (data && data.length > 0) {
+                setProjects(data);
+                setActiveProjectId(data[0].id);
+            }
+        };
+
+        fetchProjects();
+    }, []);
+
+const saveProject = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+        alert("Сначала нужно войти в аккаунт!");
+        return;
+    }
+
+    if (!activeProject) return;
+
+        const { error } = await supabase
+            .from('projects')
+            .upsert({
+                id: activeProject.id, 
+                user_id: session.user.id,
+                title: activeProject.title,
+                ideas: activeProject.ideas,
+                connections: activeProject.connections,
+            });
+
+        if (error) {
+            console.error("Fail to save: ", error);
+        } else {
+            console.log("Project was saved!");
+        }
+    };
 
     return (
         <div 
