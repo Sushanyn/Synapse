@@ -14,7 +14,8 @@ export default function Header() {
                 <nav className='flex items-center gap-4 text-[13px] text-gray-400'>
                     <NavLink to='/home' className='hover:text-white'>Home</NavLink>
                     <NavLink to='/canvas' className='hover:text-white'>Canvas</NavLink>
-                    <NavLink to='/login' className='hover:text-white'>Login</NavLink>
+                    <NavLink to='/kanban' className='hover:text-white'>Kanban</NavLink>
+                    <NavLink to='/auth' className='hover:text-white'>Login</NavLink>
                 </nav>
                 <span className='text-[13px] text-gray-400 ml-6'></span>
 

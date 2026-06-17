@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { Header, Sidebar } from "../components";
+import { Header, Sidebar, Footer } from "../components";
 
 export default function AppLayout() {
     return (
@@ -11,6 +11,7 @@ export default function AppLayout() {
                     <Outlet></Outlet>
                 </main>                
             </div>
+            <Footer></Footer>
         </div>
     )
 }
