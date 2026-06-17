@@ -25,8 +25,12 @@ export default function Canvas() {
     const [dragState, setDragState] = useState({ type: null, id: null })
     const [tempMouse, setTempMouse] = useState({ x: 0, y: 0 })
     const [hoveredIdeaId, setHoveredIdeaId] = useState(null) 
+    const [isSaving, setIsSaving] = useState(false)
 
     const lastMouse = useRef({ x: 0, y: 0 })
+
+    const fileInputRef = useRef(null)
+    const [isUploading, setIsUploading] = useState(false)
 
     function createProject() {
         const project = { id: crypto.randomUUID(), title: `Project ${projects.length + 1}`, ideas: [], connections: [] }
@@ -63,7 +67,6 @@ export default function Canvas() {
         
         setProjects(prev => prev.map(p => {
             if (p.id !== activeProjectId) return p;
-            
             if (p.connections.some(c => c.from === fromId && c.to === toId)) return p;
             
             return {
@@ -118,7 +121,7 @@ export default function Canvas() {
                 .eq('user_id', session.user.id);
 
             if (error) {
-                console.error("Ошибка загрузки:", error);
+                console.error("Loading error:", error);
                 return;
             }
 
@@ -131,14 +134,31 @@ export default function Canvas() {
         fetchProjects();
     }, []);
 
-const saveProject = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) {
-        alert("Сначала нужно войти в аккаунт!");
-        return;
-    }
+const handleWheel = (e) => {
+        const direction = e.deltaY > 0 ? -0.1 : 0.1; 
+        
+        setCamera(prev => {
+            let newZoom = prev.zoom + direction;
+            newZoom = Math.min(Math.max(newZoom, 0.2), 3);
+                        
+            return { ...prev, zoom: newZoom };
+        });
+    };
+    
+    const saveProject = async () => {
+        setIsSaving(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.user) {
+            alert("First you need to log in!");
+            setIsSaving(false);
+            return;
+        }
 
-    if (!activeProject) return;
+        if (!activeProject) {
+            setIsSaving(false);
+            return;
+        }
 
         const { error } = await supabase
             .from('projects')
@@ -154,6 +174,89 @@ const saveProject = async () => {
             console.error("Fail to save: ", error);
         } else {
             console.log("Project was saved!");
+        }
+        
+        setIsSaving(false);
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveProject();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeProject]);
+
+const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+            alert("Нужно войти в аккаунт!");
+            return;
+        }
+
+        try {
+            setIsUploading(true);
+            
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const filePath = `${session.user.id}/${fileName}`; 
+
+            const { error: uploadError } = await supabase.storage
+                .from('canvas_files')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('canvas_files')
+                .getPublicUrl(filePath);
+
+            const newIdea = { 
+                id: crypto.randomUUID(), 
+                title: file.type.includes('image') ? 'New Image' : 'New File', 
+                text: '', 
+                x: activeProject?.ideas[activeProject.ideas.length - 1] ? activeProject.ideas[activeProject.ideas.length - 1].x + 270 : 100, 
+                y: activeProject?.ideas[activeProject.ideas.length - 1] ? activeProject.ideas[activeProject.ideas.length - 1].y : 100,
+                fileUrl: publicUrl, 
+                fileType: file.type
+            };
+
+            const updatedIdeas = [...(activeProject?.ideas || []), newIdea];
+
+            setProjects(projects.map(project => {
+                if (project.id !== activeProjectId) return project;
+                return { ...project, ideas: updatedIdeas };
+            }));
+
+            const { error: saveError } = await supabase
+                .from('projects')
+                .upsert({
+                    id: activeProject.id, 
+                    user_id: session.user.id,
+                    title: activeProject.title,
+                    ideas: updatedIdeas,
+                    connections: activeProject.connections,
+                });
+
+            if (saveError) {
+                console.error("Error auto-saving the project in the database:", saveError);
+            } else {
+                console.log("The project with the file has been successfully autosaved to the database!");
+            }
+
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Failed to upload file.");
+        } finally {
+            setIsUploading(false);
+            e.target.value = null; 
         }
     };
 
@@ -212,9 +315,32 @@ const saveProject = async () => {
                 <main className="flex-1 flex flex-col h-full relative">
                     <div className="p-4 flex items-center justify-between border-b border-white/10 bg-[#111] z-10">
                         <h1 className="font-bold text-xl">{activeProject?.title}</h1>
-                        <button onClick={createIdea} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded transition-colors">
-                            New idea
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={saveProject} 
+                                disabled={isSaving}
+                                className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 px-4 py-2 rounded transition-colors disabled:opacity-50 text-sm font-medium"
+                            >
+                                {isSaving ? 'Saving...' : 'Save (Ctrl+S)'}
+                            </button>
+                            <button onClick={createIdea} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded transition-colors text-sm font-medium">
+                                New idea
+                            </button>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                onChange={handleFileUpload} 
+                                className="hidden" 
+                                accept="image/*,.pdf" 
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current.click()} 
+                                disabled={isUploading}
+                                className="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded transition-colorsdisabled:opacity-50 text-sm font-medium"
+                            >
+                                {isUploading ? 'Uploading...' : 'Add File'}
+                            </button>                            
+                        </div>
                     </div>
 
                     <div 
@@ -223,6 +349,7 @@ const saveProject = async () => {
                             setDragState({ type: 'pan', id: null })
                             lastMouse.current = { x: e.clientX, y: e.clientY }
                         }}
+                        onWheel={handleWheel}
                     >
                         <div className="absolute inset-0 pointer-events-none" 
                             style={{
@@ -306,7 +433,17 @@ const saveProject = async () => {
                                     >
                                         <div className="w-2 h-2 bg-white rounded-full opacity-50" />
                                     </div>
-
+                                    {idea.fileUrl && idea.fileType?.includes('image') && (
+                                        <div className="w-full mt-1 mb-2 overflow-hidden rounded bg-zinc-900 border border-white/5 flex items-center justify-center">
+                                            <img 
+                                                src={idea.fileUrl} 
+                                                alt="Uploaded content" 
+                                                className="w-full h-full object-cover pointer-events-none"
+                                                onError={(e) => {
+                                                }}
+                                            />
+                                        </div>
+                                    )}
                                     <input 
                                         className="bg-transparent font-bold outline-none border-b border-transparent focus:border-white/20 w-full cursor-text"
                                         value={idea.title}
