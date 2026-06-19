@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { supabase } from "../lib/supabase";
 
 export const Auth = () => {
     const [isLoginMode, setIsLoginMode] = useState(true);
@@ -22,6 +23,20 @@ export const Auth = () => {
 
         if (!result.error) {
             navigate('/home');
+        }
+    };
+
+    const handleGoogleLogin = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/home` 
+            }
+        });
+
+        if (error) {
+            console.error("Google Login Error:", error.message);
+            alert("Error logging in with Google");
         }
     };
 
@@ -71,7 +86,11 @@ export const Auth = () => {
                 </form>
 
                 <div className="mt-6 flex flex-col gap-3">
-                    <button className="flex items-center justify-center gap-3 bg-white text-black text-sm px-4 py-2.5 rounded-md hover:bg-gray-200 transition">
+                    <button 
+                        type="button"
+                        onClick={handleGoogleLogin}
+                        className="flex items-center justify-center gap-3 bg-white text-black text-sm px-4 py-2.5 rounded-md hover:bg-gray-200 transition cursor-pointer"
+                    >
                         <img src="https://authjs.dev/img/providers/google.svg" alt="Google" className="w-5 h-5"/>
                         Continue with Google
                     </button>
