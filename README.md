@@ -6,6 +6,7 @@
   ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
   ![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite)
   ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38BDF8?style=flat-square&logo=tailwindcss)
+  ![Zustand](https://img.shields.io/badge/Zustand-20232A?style=flat&logo=react&logoColor=61DAFB)
   ![Supabase](https://img.shields.io/badge/Supabase-backend-3ECF8E?style=flat-square&logo=supabase)
   ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 </div>
