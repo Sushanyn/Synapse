@@ -3,41 +3,34 @@ import { IoIosClose } from "react-icons/io";
 import { MdOpenInFull } from "react-icons/md";
 import { FaEllipsisV } from "react-icons/fa";
 import { supabase } from '../lib/supabase';
-
-const initialProjects = [
-    {
-        id: crypto.randomUUID(),
-        title: "First project",
-        ideas: [],
-        connections: []
-    } 
-]
+import { useBoardStore } from '../store/useBoardStore';
 
 export default function Canvas() {
-    const [projects, setProjects] = useState(initialProjects)
-    const [activeProjectId, setActiveProjectId] = useState(initialProjects[0].id)
-    const activeProject = projects.find(project => project.id === activeProjectId)
+    const { 
+        projects, setProjects, 
+        activeProjectId, setActiveProjectId, 
+        camera, setCamera, 
+        isSidebarOpen, setIsSidebarOpen,
+        createProject, createIdea, updateIdea, createConnection 
+    } = useBoardStore();
+
+    const activeProject = projects.find(project => project.id === activeProjectId);
     
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true)
     const [editingId, setEditingId] = useState(null)
-    const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 })
-    
     const [dragState, setDragState] = useState({ type: null, id: null })
     const [tempMouse, setTempMouse] = useState({ x: 0, y: 0 })
     const [hoveredIdeaId, setHoveredIdeaId] = useState(null) 
     const [isSaving, setIsSaving] = useState(false)
-
-    const lastMouse = useRef({ x: 0, y: 0 })
-
-    const fileInputRef = useRef(null)
     const [isUploading, setIsUploading] = useState(false)
-
-    const [currentUser, setCurrentUser] = useState(null); 
-    const [cursors, setCursors] = useState({});
-    const channelRef = useRef(null);
-    const lastSendRef = useRef(0);
     const [isInviteOpen, setIsInviteOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
+    const [currentUser, setCurrentUser] = useState(null); 
+    const [cursors, setCursors] = useState({});
+
+    const lastMouse = useRef({ x: 0, y: 0 })
+    const fileInputRef = useRef(null)
+    const channelRef = useRef(null);
+    const lastSendRef = useRef(0);
 
     const broadcastBoardState = (ideas, connections) => {
         if (channelRef.current) {
@@ -49,63 +42,13 @@ export default function Canvas() {
         }
     };
 
-    function createProject() {
-        const project = { id: crypto.randomUUID(), title: `Project ${projects.length + 1}`, ideas: [], connections: [] }
-        setProjects([...projects, project])
-        setActiveProjectId(project.id)
-    }
-
-    function createIdea() {
-        setProjects(projects.map(project => {
-            if (project.id !== activeProjectId) return project
-            const lastIdea = project.ideas[project.ideas.length - 1]
-            return {
-                ...project,
-                ideas: [
-                    ...project.ideas,
-                    { id: crypto.randomUUID(), title: 'New idea', text: '', x: lastIdea ? lastIdea.x + 270 : 100, y: lastIdea ? lastIdea.y : 100 }
-                ]
-            }
-        }))
-    }
-
-    function updateIdea(ideaId, newFields) {
-        setProjects(projects.map(project => {
-            if (project.id !== activeProjectId) return project
-            return {
-                ...project,
-                ideas: project.ideas.map(idea => idea.id === ideaId ? { ...idea, ...newFields } : idea)
-            }
-        }))
-    }
-
-    function createConnection(fromId, toId) {
-        if (fromId === toId) return;
-        
-        setProjects(prev => prev.map(p => {
-            if (p.id !== activeProjectId) return p;
-            if (p.connections.some(c => c.from === fromId && c.to === toId)) return p;
-            
-            return {
-                ...p,
-                connections: [...p.connections, { id: crypto.randomUUID(), from: fromId, to: toId }]
-            }
-        }))
-    }
-
     const handleMouseMove = (e) => {
         const now = Date.now();
         if (now - lastSendRef.current > 50 && channelRef.current && currentUser) {
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'cursor-move',
-                payload: {
-                    userId: currentUser.id,
-                    email: currentUser.email,
-                    x: e.clientX,
-                    y: e.clientY,
-                    color: '#7EB8F7'
-                }
+                payload: { userId: currentUser.id, email: currentUser.email, x: e.clientX, y: e.clientY, color: '#7EB8F7' }
             });
             lastSendRef.current = now;
         }
@@ -129,10 +72,7 @@ export default function Canvas() {
         } else if (dragState.type === 'pan') {
             setCamera(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
         } else if (dragState.type === 'connect') {
-            setTempMouse(prev => ({
-                x: prev.x + dx / camera.zoom,
-                y: prev.y + dy / camera.zoom
-            }))
+            setTempMouse(prev => ({ x: prev.x + dx / camera.zoom, y: prev.y + dy / camera.zoom }))
         }
     }
 
@@ -142,6 +82,15 @@ export default function Canvas() {
         }
         setDragState({ type: null, id: null })
     }
+
+    const handleWheel = (e) => {
+        const direction = e.deltaY > 0 ? -0.1 : 0.1; 
+        setCamera(prev => {
+            let newZoom = prev.zoom + direction;
+            newZoom = Math.min(Math.max(newZoom, 0.2), 3);
+            return { ...prev, zoom: newZoom };
+        });
+    };
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -154,12 +103,8 @@ export default function Canvas() {
             const roomFromUrl = searchParams.get('room');
 
             let query = supabase.from('projects').select('*');
-            
-            if (roomFromUrl) {
-                query = query.eq('id', roomFromUrl);
-            } else {
-                query = query.eq('user_id', session.user.id);
-            }
+            if (roomFromUrl) query = query.eq('id', roomFromUrl);
+            else query = query.eq('user_id', session.user.id);
 
             const { data, error } = await query;
 
@@ -175,7 +120,6 @@ export default function Canvas() {
                 alert("Error: Project not found or you don't have access to it!");
             }
         };
-
         fetchProjects();
     }, []);
 
@@ -215,51 +159,6 @@ export default function Canvas() {
         };
     }, [currentUser, activeProjectId]);
 
-    const handleWheel = (e) => {
-        const direction = e.deltaY > 0 ? -0.1 : 0.1; 
-        
-        setCamera(prev => {
-            let newZoom = prev.zoom + direction;
-            newZoom = Math.min(Math.max(newZoom, 0.2), 3);
-            return { ...prev, zoom: newZoom };
-        });
-    };
-    
-    const saveProject = async () => {
-        setIsSaving(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session?.user) {
-            alert("First you need to log in!");
-            setIsSaving(false);
-            return;
-        }
-
-        if (!activeProject) {
-            setIsSaving(false);
-            return;
-        }
-
-        const { error } = await supabase
-            .from('projects')
-            .upsert({
-                id: activeProject.id, 
-                user_id: session.user.id,
-                title: activeProject.title,
-                ideas: activeProject.ideas,
-                connections: activeProject.connections,
-            });
-
-        if (error) {
-            console.error("Fail to save: ", error);
-        } else {
-            console.log("Project was saved!");
-            broadcastBoardState(activeProject.ideas, activeProject.connections);
-        }
-        
-        setIsSaving(false);
-    };
-
     useEffect(() => {
         const handleKeyDown = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -267,75 +166,77 @@ export default function Canvas() {
                 saveProject();
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeProject]);
+
+    const saveProject = async () => {
+        setIsSaving(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.user) {
+            alert("First you need to log in!");
+            setIsSaving(false); return;
+        }
+        if (!activeProject) {
+            setIsSaving(false); return;
+        }
+
+        const { error } = await supabase.from('projects').upsert({
+            id: activeProject.id, 
+            user_id: session.user.id,
+            title: activeProject.title,
+            ideas: activeProject.ideas,
+            connections: activeProject.connections,
+        });
+
+        if (error) console.error("Fail to save: ", error);
+        else {
+            console.log("Project was saved!");
+            broadcastBoardState(activeProject.ideas, activeProject.connections);
+        }
+        setIsSaving(false);
+    };
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-            alert("You need to log in first!");
-            return;
-        }
+        if (!session?.user) { alert("You need to log in first!"); return; }
 
         try {
             setIsUploading(true);
-            
             const fileExt = file.name.split('.').pop();
             const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
             const filePath = `${session.user.id}/${fileName}`; 
 
-            const { error: uploadError } = await supabase.storage
-                .from('canvas_files')
-                .upload(filePath, file);
-
+            const { error: uploadError } = await supabase.storage.from('canvas_files').upload(filePath, file);
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('canvas_files')
-                .getPublicUrl(filePath);
+            const { data: { publicUrl } } = supabase.storage.from('canvas_files').getPublicUrl(filePath);
 
             const newIdea = { 
                 id: crypto.randomUUID(), 
-                title: file.type.includes('image') ? 'New Image' : 'New File', 
-                text: '', 
+                title: file.type.includes('image') ? 'New Image' : 'New File', text: '', 
                 x: activeProject?.ideas[activeProject.ideas.length - 1] ? activeProject.ideas[activeProject.ideas.length - 1].x + 270 : 100, 
                 y: activeProject?.ideas[activeProject.ideas.length - 1] ? activeProject.ideas[activeProject.ideas.length - 1].y : 100,
-                fileUrl: publicUrl, 
-                fileType: file.type
+                fileUrl: publicUrl, fileType: file.type
             };
 
             const updatedIdeas = [...(activeProject?.ideas || []), newIdea];
 
-            setProjects(projects.map(project => {
-                if (project.id !== activeProjectId) return project;
-                return { ...project, ideas: updatedIdeas };
-            }));
+            setProjects(projects.map(project => project.id !== activeProjectId ? project : { ...project, ideas: updatedIdeas }));
 
-            const { error: saveError } = await supabase
-                .from('projects')
-                .upsert({
-                    id: activeProject.id, 
-                    user_id: session.user.id,
-                    title: activeProject.title,
-                    ideas: updatedIdeas,
-                    connections: activeProject.connections,
-                });
+            const { error: saveError } = await supabase.from('projects').upsert({
+                id: activeProject.id, user_id: session.user.id, title: activeProject.title, ideas: updatedIdeas, connections: activeProject.connections,
+            });
 
-            if (saveError) {
-                console.error("Error auto-saving the project in the database:", saveError);
-            } else {
+            if (saveError) console.error("Error auto-saving the project in the database:", saveError);
+            else {
                 console.log("The project with the file has been successfully autosaved to the database!");
-                
-                if (typeof broadcastBoardState === 'function') {
-                    broadcastBoardState(updatedIdeas, activeProject.connections);
-                }
+                if (typeof broadcastBoardState === 'function') broadcastBoardState(updatedIdeas, activeProject.connections);
             }
-
         } catch (error) {
             console.error("Error:", error);
             alert("Failed to upload file.");
@@ -347,9 +248,7 @@ export default function Canvas() {
 
     const handleCopyLink = () => {
         if (!activeProjectId) return;
-        
         const secretLink = `${window.location.origin}${window.location.pathname}?room=${activeProjectId}`;
-        
         navigator.clipboard.writeText(secretLink);
         alert("Secret link to this project copied to clipboard!");
     };
@@ -357,10 +256,8 @@ export default function Canvas() {
     const handleSendInvite = async (e) => {
         e.preventDefault();
         if (!inviteEmail.trim()) return;
-
         console.log(`Invite sent to email: ${inviteEmail}`);
         alert(`Invite for ${inviteEmail} successfully sent!`);
-        
         setInviteEmail('');
         setIsInviteOpen(false);
     };
@@ -501,13 +398,7 @@ export default function Canvas() {
                                     const y2 = to.y + 40;
 
                                     return (
-                                        <path 
-                                            key={conn.id} 
-                                            d={`M ${x1} ${y1} C ${x1 + 80} ${y1}, ${x2 - 80} ${y2}, ${x2} ${y2}`} 
-                                            stroke="#4b5563" 
-                                            strokeWidth="3" 
-                                            fill="none" 
-                                        />
+                                        <path key={conn.id} d={`M ${x1} ${y1} C ${x1 + 80} ${y1}, ${x2 - 80} ${y2}, ${x2} ${y2}`} stroke="#4b5563" strokeWidth="3" fill="none" />
                                     )
                                 })}
 
@@ -517,13 +408,7 @@ export default function Canvas() {
                                     const x1 = from.x + 250;
                                     const y1 = from.y + 40;
                                     return (
-                                        <path 
-                                            d={`M ${x1} ${y1} C ${x1 + 80} ${y1}, ${tempMouse.x - 80} ${tempMouse.y}, ${tempMouse.x} ${tempMouse.y}`} 
-                                            stroke="#3b82f6" 
-                                            strokeWidth="3" 
-                                            strokeDasharray="5,5" 
-                                            fill="none" 
-                                        />
+                                        <path d={`M ${x1} ${y1} C ${x1 + 80} ${y1}, ${tempMouse.x - 80} ${tempMouse.y}, ${tempMouse.x} ${tempMouse.y}`} stroke="#3b82f6" strokeWidth="3" strokeDasharray="5,5" fill="none" />
                                     )
                                 })()}
                             </svg>
@@ -559,12 +444,7 @@ export default function Canvas() {
                                     </div>
                                     {idea.fileUrl && idea.fileType?.includes('image') && (
                                         <div className="w-full mt-1 mb-2 overflow-hidden rounded flex items-center justify-center pointer-events-none">
-                                            <img 
-                                                src={idea.fileUrl} 
-                                                alt="Uploaded content" 
-                                                className="w-full h-auto max-h-[400px] object-contain rounded-md"
-                                                onError={(e) => { console.error("Error loading image"); }}
-                                            />
+                                            <img src={idea.fileUrl} alt="Uploaded content" className="w-full h-auto max-h-[400px] object-contain rounded-md" />
                                         </div>
                                     )}
                                     <input 
@@ -586,20 +466,15 @@ export default function Canvas() {
                 </main>
             </div>
             
-            {/* --- INVITE MODAL (FIGMA STYLE) --- */}
             {isInviteOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[99999]">
                     <div className="bg-[#1a1c20] border border-[#2d3035] p-6 rounded-xl w-full max-w-md shadow-2xl relative flex flex-col gap-5 text-white animate-in fade-in zoom-in-95 duration-150">
-                        
                         <div className="flex justify-between items-center">
                             <div>
                                 <h2 className="text-lg font-semibold">Invite to workspace</h2>
                                 <p className="text-gray-400 text-xs mt-0.5">Share this board with your team members.</p>
                             </div>
-                            <button 
-                                onClick={() => setIsInviteOpen(false)}
-                                className="text-gray-400 hover:text-white transition p-1 rounded hover:bg-zinc-800"
-                            >
+                            <button onClick={() => setIsInviteOpen(false)} className="text-gray-400 hover:text-white transition p-1 rounded hover:bg-zinc-800">
                                 <IoIosClose size={24} />
                             </button>
                         </div>
@@ -607,20 +482,11 @@ export default function Canvas() {
                         <div className="flex flex-col gap-2">
                             <label className="text-xs text-gray-400 font-medium">Share secret link</label>
                             <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={`${window.location.origin}${window.location.pathname}?room=${activeProjectId}`}
-                                    className="bg-[#0c0d0f] text-xs text-gray-400 px-3 py-2.5 rounded-md border border-[#2d3035] outline-none flex-1 select-all"
-                                />
-                                <button 
-                                    onClick={handleCopyLink}
-                                    className="bg-[#2d3035] hover:bg-[#3b3f46] text-white px-4 py-2 rounded-md text-xs font-semibold transition whitespace-nowrap"
-                                >
-                                    Copy Link
-                                </button>
+                                <input type="text" readOnly value={`${window.location.origin}${window.location.pathname}?room=${activeProjectId}`} className="bg-[#0c0d0f] text-xs text-gray-400 px-3 py-2.5 rounded-md border border-[#2d3035] outline-none flex-1 select-all" />
+                                <button onClick={handleCopyLink} className="bg-[#2d3035] hover:bg-[#3b3f46] text-white px-4 py-2 rounded-md text-xs font-semibold transition whitespace-nowrap">Copy Link</button>
                             </div>
                         </div>
+
                         <div className="flex items-center my-1">
                             <div className="flex-1 h-[1px] bg-[#2d3035]" />
                             <span className="text-[10px] text-gray-500 px-3 font-bold uppercase tracking-wider">or</span>
@@ -630,20 +496,8 @@ export default function Canvas() {
                         <form onSubmit={handleSendInvite} className="flex flex-col gap-2">
                             <label className="text-xs text-gray-400 font-medium">Invite via email address</label>
                             <div className="flex gap-2">
-                                <input 
-                                    type="email" 
-                                    required
-                                    placeholder="name@company.com"
-                                    value={inviteEmail}
-                                    onChange={(e) => setInviteEmail(e.target.value)}
-                                    className="bg-[#0c0d0f] text-xs text-white px-3 py-2.5 rounded-md border border-[#2d3035] outline-none focus:border-[#7EB8F7] flex-1"
-                                />
-                                <button 
-                                    type="submit"
-                                    className="bg-[#7EB8F7] hover:bg-[#7ED9FF] text-black px-4 py-2 rounded-md text-xs font-semibold transition whitespace-nowrap"
-                                >
-                                    Send Invite
-                                </button>
+                                <input type="email" required placeholder="name@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="bg-[#0c0d0f] text-xs text-white px-3 py-2.5 rounded-md border border-[#2d3035] outline-none focus:border-[#7EB8F7] flex-1" />
+                                <button type="submit" className="bg-[#7EB8F7] hover:bg-[#7ED9FF] text-black px-4 py-2 rounded-md text-xs font-semibold transition whitespace-nowrap">Send Invite</button>
                             </div>
                         </form>
                     </div>
